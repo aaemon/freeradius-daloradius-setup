@@ -1,0 +1,14 @@
+# Environment files with sensitive data
+.env
+
+# Backup files
+*.backup
+*.bak
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+.DS_Store
+Thumbs.db
