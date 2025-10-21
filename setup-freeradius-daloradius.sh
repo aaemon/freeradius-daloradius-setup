@@ -227,18 +227,18 @@ cd daloradius
 ###############################################################################
 print_message "Importing daloRADIUS database schema..."
 
-# For new daloRADIUS, the SQL files location has changed
-if [ -f "contrib/db/fr2-mysql-daloradius-and-freeradius.sql" ]; then
-    mysql -u root -p"${DB_ROOT_PASSWORD}" ${RADIUS_DB_NAME} < contrib/db/fr2-mysql-daloradius-and-freeradius.sql
-fi
-
-if [ -f "contrib/db/mysql-daloradius.sql" ]; then
+# For new daloRADIUS (2024+), import the correct SQL files
+if [ -f "contrib/db/mariadb-daloradius.sql" ]; then
+    print_message "Importing mariadb-daloradius.sql..."
+    mysql -u root -p"${DB_ROOT_PASSWORD}" ${RADIUS_DB_NAME} < contrib/db/mariadb-daloradius.sql
+elif [ -f "contrib/db/mysql-daloradius.sql" ]; then
+    print_message "Importing mysql-daloradius.sql (older version)..."
     mysql -u root -p"${DB_ROOT_PASSWORD}" ${RADIUS_DB_NAME} < contrib/db/mysql-daloradius.sql
 fi
 
-# Check for new schema location (newer versions)
-if [ -f "contrib/db/fr3-mysql-freeradius.sql" ]; then
-    mysql -u root -p"${DB_ROOT_PASSWORD}" ${RADIUS_DB_NAME} < contrib/db/fr3-mysql-freeradius.sql
+# Import FreeRADIUS schema if needed (usually already imported in step 8)
+if [ -f "contrib/db/fr3-mariadb-freeradius.sql" ]; then
+    print_message "FreeRADIUS 3.x schema available if needed..."
 fi
 
 ###############################################################################
@@ -302,8 +302,9 @@ server {
     listen 80;
     server_name ${SERVER_NAME};
 
-    root ${DALORADIUS_PATH};
-    index index.php index.html index.htm;
+    # Point to operators directory for admin login (new daloRADIUS structure)
+    root ${DALORADIUS_PATH}/app/operators;
+    index login.php index.php index.html index.htm;
 
     # Logging
     access_log /var/log/nginx/daloradius-access.log;
@@ -311,7 +312,7 @@ server {
 
     # Main location
     location / {
-        try_files \$uri \$uri/ /index.php?\$query_string;
+        try_files \$uri \$uri/ /login.php?\$query_string;
     }
 
     # PHP-FPM Configuration
@@ -322,17 +323,24 @@ server {
         include fastcgi_params;
     }
 
+    # Allow access to common directory for assets
+    location /common/ {
+        alias ${DALORADIUS_PATH}/app/common/;
+        location ~ \.php$ {
+            include snippets/fastcgi-php.conf;
+            fastcgi_pass unix:/var/run/php/php${PHP_VERSION}-fpm.sock;
+            fastcgi_param SCRIPT_FILENAME \$request_filename;
+            include fastcgi_params;
+        }
+    }
+
     # Deny access to hidden files
     location ~ /\. {
         deny all;
     }
 
     # Deny access to config files
-    location ~ /app/common/includes/daloradius.conf.php {
-        deny all;
-    }
-    
-    location ~ /library/daloradius.conf.php {
+    location ~ /common/includes/daloradius.conf.php {
         deny all;
     }
 }
